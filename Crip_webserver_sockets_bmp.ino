@@ -4,10 +4,12 @@
 #include <LittleFS.h>
 #include <DNSServer.h>
 #include <esp_wifi.h>
-#include "WatchyDisplay.h"
-#include <Wire.h>
+#include <esp_sleep.h>
 
-const char *ssid = "Watchy";
+#define MENU_BTN_PIN 26
+#define AP_BTN_PIN 35  // Pin to activate AP and webserver
+
+const char *ssid = "captive";
 const char *password = NULL;
 
 AsyncWebServer server(80);
@@ -19,15 +21,15 @@ const IPAddress gatewayIP(4, 3, 2, 1);
 const IPAddress subnetMask(255, 255, 255, 0);
 const String localIPURL = "http://4.3.2.1";
 
-const int buttonPin = 26; 
 unsigned long buttonPressTime = 0;
 bool buttonPressed = false;
-const unsigned long longPressDuration = 3 * 1000;  // 3 seconds
+const unsigned long longPressDuration = 1000;  // 1 second
 bool setupComplete = false;
+volatile bool apButtonPressed = false;  // To track AP button state
 
-// Initialize the Watchy display
-WatchyDisplay display(DISPLAY_CS, DISPLAY_DC, DISPLAY_RES, DISPLAY_BUSY);
-
+void IRAM_ATTR onAPButtonPress() {
+  apButtonPressed = true;
+}
 
 void listFiles() {
   Serial.println("Listing files on LittleFS:");
@@ -117,6 +119,12 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
   server.begin();
 }
 
+void enterDeepSleep() {
+  Serial.println("Entering deep sleep");
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 1);  // Wake up on button press
+  esp_deep_sleep_start();
+}
+
 void setup() {
   Serial.setTxBufferSize(1024);
   Serial.begin(115200);
@@ -130,45 +138,44 @@ void setup() {
     return;
   }
   listFiles();
-  
-  startSoftAccessPoint(ssid, password, localIP, gatewayIP);
-  setUpDNSServer(dnsServer, localIP);
-  setUpWebserver(server, localIP);
 
-  pinMode(buttonPin, INPUT); 
-  setupComplete = true;
+  pinMode(MENU_BTN_PIN, INPUT);  // Set button pin as input
+  pinMode(AP_BTN_PIN, INPUT);    // Set AP button pin as input
 
-  // Initialize the display
-  display.initWatchy();
+  attachInterrupt(digitalPinToInterrupt(AP_BTN_PIN), onAPButtonPress, RISING);  // Attach interrupt
+
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0 || apButtonPressed) {
+    // If woken up by external wakeup or button press, start the AP and webserver
+    apButtonPressed = false;
+    startSoftAccessPoint(ssid, password, localIP, gatewayIP);
+    setUpDNSServer(dnsServer, localIP);
+    setUpWebserver(server, localIP);
+    setupComplete = true;
+  } else {
+    enterDeepSleep();
+  }
 
   Serial.print("\n");
   Serial.print("Startup Time:");
   Serial.println(millis());
   Serial.print("\n");
-
-  // Display BMP image from the filesystem
-  display.displayBMP("/watchface.bmp");
-
-  // Optionally, power off the display if needed
-  Serial.println("Putting display in hibernate mode...");
-  display.hibernate();
-  Serial.println("Setup complete.");
 }
 
 void loop() {
-  dnsServer.processNextRequest();
-  ws.cleanupClients();
   if (setupComplete) {
-    Serial.println(digitalRead(buttonPin));
-    if (digitalRead(buttonPin) == HIGH) {  // Button is pressed
+    dnsServer.processNextRequest();
+    ws.cleanupClients();
+
+    if (digitalRead(MENU_BTN_PIN) == HIGH) {  // Button is pressed
       if (!buttonPressed) {
         buttonPressTime = millis();
         buttonPressed = true;
       } else if (millis() - buttonPressTime >= longPressDuration) {
-        Serial.print("Button held for ");
-        Serial.print((int)longPressDuration/1000);
-        Serial.println(" seconds, restarting...");
-        ESP.restart();
+        Serial.println("Button held for 1 second, entering deep sleep...");
+        server.end();
+        WiFi.softAPdisconnect(true);
+        setupComplete = false;
+        enterDeepSleep();
       }
     } else {
       buttonPressed = false;
@@ -176,5 +183,4 @@ void loop() {
 
     delay(30);  // Yield control to avoid watchdog timeout
   }
-  delay(30);
 }
