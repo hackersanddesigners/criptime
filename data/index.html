@@ -20,12 +20,26 @@
     #messages p {
       margin: 5px 0;
     }
+    .sensor-data {
+      margin-top: 20px;
+    }
+    .sensor-data div {
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
   <h1>ESP32 WebSocket Example</h1>
   <button onclick="sendMessage('ping')">Send Ping</button>
   <img src="websocks.webp" alt="WebSockets" width="200" height="200">
+  
+  <div class="sensor-data">
+    <div id="x">X: </div>
+    <div id="y">Y: </div>
+    <div id="z">Z: </div>
+    <div id="steps">Steps: </div>
+  </div>
+  
   <div id="messages"></div>
 
   <script>
@@ -59,6 +73,7 @@
     function onMessage(event) {
       console.log('Message received:', event.data);
       displayMessage(`Message received: ${event.data}`);
+      updateSensorData(event.data);
     }
 
     function sendMessage(message) {
@@ -72,6 +87,26 @@
       p.textContent = message;
       messages.appendChild(p);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    function updateSensorData(data) {
+      try {
+        var json = JSON.parse(data);
+        if (json.x !== undefined) {
+          document.getElementById('x').textContent = 'X: ' + json.x;
+        }
+        if (json.y !== undefined) {
+          document.getElementById('y').textContent = 'Y: ' + json.y;
+        }
+        if (json.z !== undefined) {
+          document.getElementById('z').textContent = 'Z: ' + json.z;
+        }
+        if (json.steps !== undefined) {
+          document.getElementById('steps').textContent = 'Steps: ' + json.steps;
+        }
+      } catch (e) {
+        console.error('Error parsing JSON:', e);
+      }
     }
   </script>
 </body>
