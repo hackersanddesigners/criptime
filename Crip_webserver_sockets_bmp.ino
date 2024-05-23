@@ -8,6 +8,8 @@
 #include <Wire.h>
 #include <ArduinoJson.h>
 #include "SensorBMA423.hpp"
+#include "WatchyDisplay.h"
+#include <Fonts/FreeMonoBold9pt7b.h>
 
 #define MENU_BTN_PIN 26
 #define AP_BTN_PIN 35  // Pin to activate AP and webserver
@@ -27,8 +29,7 @@ const String localIPURL = "http://4.3.2.1";
 unsigned long buttonPressTime = 0;
 bool buttonPressed = false;
 const unsigned long longPressDuration = 1000;  // 1 second
-bool setupComplete = false;
-volatile bool apButtonPressed = false;  // To track AP button state
+volatile bool apButtonPressed = false;         // To track AP button state
 
 #define SENSOR_SDA 21
 #define SENSOR_SCL 22
@@ -39,10 +40,22 @@ volatile bool apButtonPressed = false;  // To track AP button state
 
 SensorBMA423 accel;
 bool sensorIRQ = false;
-unsigned long lastSensorUpdate = 0;
-const unsigned long sensorUpdateInterval = 1000; // 1 second
+
+// Define the display pins as used in Watchy
+#define DISPLAY_CS 5
+#define DISPLAY_RES 9
+#define DISPLAY_DC 10
+#define DISPLAY_BUSY 19
+
+// AP active
+bool apActive = false;
+bool previousApState = false; 
+
+// Initialize the Watchy display
+WatchyDisplay display(DISPLAY_CS, DISPLAY_DC, DISPLAY_RES, DISPLAY_BUSY);
 
 void IRAM_ATTR onAPButtonPress() {
+  Serial.println("AP button pressed");
   apButtonPressed = true;
 }
 
@@ -96,22 +109,41 @@ void startSoftAccessPoint(const char *ssid, const char *password, const IPAddres
   esp_wifi_init(&my_config);
   esp_wifi_start();
   vTaskDelay(100 / portTICK_PERIOD_MS);
+  apActive = true;
 }
 
 void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
-  server.on("/connecttest.txt", [](AsyncWebServerRequest *request) { request->redirect("http://logout.net"); });
-  server.on("/wpad.dat", [](AsyncWebServerRequest *request) { request->send(404); });
+  server.on("/connecttest.txt", [](AsyncWebServerRequest *request) {
+    request->redirect("http://logout.net");
+  });
+  server.on("/wpad.dat", [](AsyncWebServerRequest *request) {
+    request->send(404);
+  });
 
-  server.on("/generate_204", [](AsyncWebServerRequest *request) { request->redirect(localIPURL); });
-  server.on("/redirect", [](AsyncWebServerRequest *request) { request->redirect(localIPURL); });
-  server.on("/hotspot-detect.html", [](AsyncWebServerRequest *request) { request->redirect(localIPURL); });
-  server.on("/canonical.html", [](AsyncWebServerRequest *request) { request->redirect(localIPURL); });
-  server.on("/success.txt", [](AsyncWebServerRequest *request) { request->send(200); });
-  server.on("/ncsi.txt", [](AsyncWebServerRequest *request) { request->redirect(localIPURL); });
+  server.on("/generate_204", [](AsyncWebServerRequest *request) {
+    request->redirect(localIPURL);
+  });
+  server.on("/redirect", [](AsyncWebServerRequest *request) {
+    request->redirect(localIPURL);
+  });
+  server.on("/hotspot-detect.html", [](AsyncWebServerRequest *request) {
+    request->redirect(localIPURL);
+  });
+  server.on("/canonical.html", [](AsyncWebServerRequest *request) {
+    request->redirect(localIPURL);
+  });
+  server.on("/success.txt", [](AsyncWebServerRequest *request) {
+    request->send(200);
+  });
+  server.on("/ncsi.txt", [](AsyncWebServerRequest *request) {
+    request->redirect(localIPURL);
+  });
 
-  server.on("/favicon.ico", [](AsyncWebServerRequest *request) { request->send(404); });
+  server.on("/favicon.ico", [](AsyncWebServerRequest *request) {
+    request->send(404);
+  });
 
   server.on("/", HTTP_ANY, [](AsyncWebServerRequest *request) {
     request->send(LittleFS, "/index.html", "text/html");
@@ -140,7 +172,7 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
 
 void enterDeepSleep() {
   Serial.println("Entering deep sleep");
-  accel.disableAccelerometer();  // Disable accelerometer before deep sleep
+  accel.disableAccelerometer();                  // Disable accelerometer before deep sleep
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 1);  // Wake up on button press
   esp_deep_sleep_start();
 }
@@ -165,11 +197,7 @@ void setupAccelerometer() {
   accel.enableAccelerometer();
   accel.enablePedometer();
   accel.resetPedometer();
-  accel.enableFeature(SensorBMA423::FEATURE_STEP_CNTR |
-                      SensorBMA423::FEATURE_ANY_MOTION |
-                      SensorBMA423::FEATURE_ACTIVITY |
-                      SensorBMA423::FEATURE_TILT |
-                      SensorBMA423::FEATURE_WAKEUP, true);
+  accel.enableFeature(SensorBMA423::FEATURE_STEP_CNTR | SensorBMA423::FEATURE_ANY_MOTION | SensorBMA423::FEATURE_ACTIVITY | SensorBMA423::FEATURE_TILT | SensorBMA423::FEATURE_WAKEUP, true);
 
   accel.enablePedometerIRQ();
   accel.enableTiltIRQ();
@@ -179,10 +207,30 @@ void setupAccelerometer() {
   accel.configInterrupt();
 }
 
+void displayWatchface() {
+    if (apActive != previousApState) {  // only update the display if the state changes
+        Serial.println("Updating display");
+        previousApState = apActive;
+        display.initWatchy();  // Initialize the display
+        if (LittleFS.exists("/watchface.bmp")) {
+            display.renderBMP("/watchface.bmp");
+        }
+        if (apActive) {
+            display.setFont(&FreeMonoBold9pt7b);
+            display.setTextColor(GxEPD_BLACK);
+            display.setCursor(30, 80);
+            display.println("Server active");
+        }
+        display.display(true);  // full refresh to update the screen
+    }
+}
+
+
 void setup() {
   Serial.setTxBufferSize(1024);
   Serial.begin(115200);
-  while (!Serial);
+  while (!Serial)
+    ;
   delay(1000);
   Serial.println("\n\nCripTime, V0.0.2 compiled " __DATE__ " " __TIME__ " by hrk");
   Serial.printf("%s-%d\n\r", ESP.getChipModel(), ESP.getChipRevision());
@@ -198,67 +246,70 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(AP_BTN_PIN), onAPButtonPress, RISING);  // Attach interrupt
 
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0 || apButtonPressed) {
-    apButtonPressed = false;
+  // Initialize the display
+  display.initWatchy();
+  displayWatchface();
+
+  // Setup Accelerometer
+  setupAccelerometer();
+
+  apActive = false;  // the ap should be active when setup is running.
+
+  // Start the WiFi AP and Web Server if the button is pressed
+  if (digitalRead(AP_BTN_PIN) == HIGH) {
     startSoftAccessPoint(ssid, password, localIP, gatewayIP);
     setUpDNSServer(dnsServer, localIP);
     setUpWebserver(server, localIP);
-    setupAccelerometer();
-    setupComplete = true;
   } else {
     enterDeepSleep();
   }
-
-  Serial.print("\n");
-  Serial.print("Startup Time:");
-  Serial.println(millis());
-  Serial.print("\n");
 }
 
 void loop() {
-  if (setupComplete) {
-    dnsServer.processNextRequest();
-    ws.cleanupClients();
+  dnsServer.processNextRequest();
 
-    if (digitalRead(MENU_BTN_PIN) == HIGH) {  // Button is pressed
-      if (!buttonPressed) {
-        buttonPressTime = millis();
-        buttonPressed = true;
-      } else if (millis() - buttonPressTime >= longPressDuration) {
-        Serial.println("Button held for 1 second, entering deep sleep...");
-        server.end();
-        WiFi.softAPdisconnect(true);
-        setupComplete = false;
-        enterDeepSleep();
-      }
-    } else {
-      buttonPressed = false;
+  if (sensorIRQ) {
+    sensorIRQ = false;
+    uint16_t status = accel.readIrqStatus();
+
+    int16_t x, y, z;
+    if (accel.getAccelerometer(x, y, z)) {
+      StaticJsonDocument<200> jsonDoc;
+      jsonDoc["x"] = x;
+      jsonDoc["y"] = y;
+      jsonDoc["z"] = z;
+      String jsonString;
+      serializeJson(jsonDoc, jsonString);
+      ws.textAll(jsonString);
     }
 
-    if (sensorIRQ || millis() - lastSensorUpdate >= sensorUpdateInterval) {
-      sensorIRQ = false;
-      lastSensorUpdate = millis();
-
-      int16_t x, y, z;
-      if (accel.getAccelerometer(x, y, z)) {
-        StaticJsonDocument<200> jsonDoc;
-        jsonDoc["x"] = x;
-        jsonDoc["y"] = y;
-        jsonDoc["z"] = z;
-        String jsonString;
-        serializeJson(jsonDoc, jsonString);
-        ws.textAll(jsonString);
-      }
-
-      if (accel.isPedometer()) {
-        uint32_t stepCounter = accel.getPedometerCounter();
-        Serial.printf("Step count interrupt, step Counter:%u\n", stepCounter);
-        StaticJsonDocument<200> jsonDoc;
-        jsonDoc["steps"] = stepCounter;
-        String jsonString;
-        serializeJson(jsonDoc, jsonString);
-        ws.textAll(jsonString);
-      }
+    if (accel.isPedometer()) {
+      uint32_t stepCounter = accel.getPedometerCounter();
+      Serial.printf("Step count interrupt, step Counter:%u\n", stepCounter);
+      StaticJsonDocument<200> jsonDoc;
+      jsonDoc["steps"] = stepCounter;
+      String jsonString;
+      serializeJson(jsonDoc, jsonString);
+      ws.textAll(jsonString);
     }
+  }
+
+
+  displayWatchface();  // Display watchface with "Server active" text
+
+  if (digitalRead(MENU_BTN_PIN) == HIGH) {  // Button is pressed
+    if (!buttonPressed) {
+      buttonPressTime = millis();
+      buttonPressed = true;
+    } else if (millis() - buttonPressTime >= longPressDuration) {
+      Serial.println("Button held for 1 second, entering deep sleep...");
+      server.end();
+      apActive = false;
+      WiFi.softAPdisconnect(true);
+      displayWatchface();
+      enterDeepSleep();
+    }
+  } else {
+    buttonPressed = false;
   }
 }
