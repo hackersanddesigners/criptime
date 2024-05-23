@@ -26,8 +26,12 @@ void WatchyDisplay::displayErrorMessage(const char *message) {
     println(message);
     display(true);
 }
-
 void WatchyDisplay::displayBMP(const char *filename) {
+  renderBMP(filename);
+  display(true); // Update the display with the new image
+}
+
+void WatchyDisplay::renderBMP(const char *filename) {
     if (!LittleFS.begin()) {
         Serial.println("LittleFS mount failed");
         displayErrorMessage("FS mount failed");
@@ -72,6 +76,9 @@ void WatchyDisplay::displayBMP(const char *filename) {
         return;
     }
 
+    Serial.print("Rendering watchface "); 
+    // print the filename char array as string
+    Serial.println( filename );
     // Set the file pointer to the start of the bitmap data
     file.seek(dataOffset, SeekSet);
 
@@ -96,5 +103,4 @@ void WatchyDisplay::displayBMP(const char *filename) {
     }
 
     file.close();
-    display(true); // Update the display with the new image
 }

@@ -14,6 +14,7 @@ class WatchyDisplay : public GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> {
   public:
     WatchyDisplay(int8_t cs, int8_t dc, int8_t rst, int8_t busy);
     void initWatchy();
+    void renderBMP(const char *filename);
     void displayBMP(const char *filename);
     void displayErrorMessage(const char *message);
 };
