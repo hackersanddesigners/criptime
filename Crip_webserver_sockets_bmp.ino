@@ -51,6 +51,10 @@ bool sensorIRQ = false;
 bool apActive = false;
 bool previousApState = false; 
 
+unsigned long lastAccelUpdate = 0;
+const unsigned long accelUpdateInterval = 100;  // Update every second
+
+
 // Initialize the Watchy display
 WatchyDisplay display(DISPLAY_CS, DISPLAY_DC, DISPLAY_RES, DISPLAY_BUSY);
 
@@ -267,6 +271,10 @@ void setup() {
 
 void loop() {
   dnsServer.processNextRequest();
+    Serial.print(".");
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastAccelUpdate >= accelUpdateInterval) {
+        lastAccelUpdate = currentMillis;
 
   if (sensorIRQ) {
     sensorIRQ = false;
@@ -282,6 +290,11 @@ void loop() {
       serializeJson(jsonDoc, jsonString);
       ws.textAll(jsonString);
     }
+    }
+
+    if (sensorIRQ) {
+        sensorIRQ = false;
+        uint16_t status = accel.readIrqStatus();
 
     if (accel.isPedometer()) {
       uint32_t stepCounter = accel.getPedometerCounter();
