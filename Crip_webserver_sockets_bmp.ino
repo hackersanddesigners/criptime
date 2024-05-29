@@ -49,10 +49,10 @@ bool sensorIRQ = false;
 
 // AP active
 bool apActive = false;
-bool previousApState = false; 
+bool previousApState = false;
 
 unsigned long lastAccelUpdate = 0;
-const unsigned long accelUpdateInterval = 100;  // Update every second
+const unsigned long accelUpdateInterval = 100;  // Update every 0.1 second
 
 
 // Initialize the Watchy display
@@ -211,22 +211,20 @@ void setupAccelerometer() {
   accel.configInterrupt();
 }
 
-void displayWatchface() {
-    if (apActive != previousApState) {  // only update the display if the state changes
-        Serial.println("Updating display");
-        previousApState = apActive;
-        display.initWatchy();  // Initialize the display
-        if (LittleFS.exists("/watchface.bmp")) {
-            display.renderBMP("/watchface.bmp");
-        }
-        if (apActive) {
-            display.setFont(&FreeMonoBold9pt7b);
-            display.setTextColor(GxEPD_BLACK);
-            display.setCursor(30, 80);
-            display.println("Server active");
-        }
-        display.display(true);  // full refresh to update the screen
-    }
+void displayWatchface(bool renderServerText = false) {
+  if (LittleFS.exists("/watchface.bmp")) {
+    display.renderBMP("/watchface.bmp");
+    Serial.println("Displayed watchface");
+  }
+
+  if (renderServerText) {
+    Serial.println("Render Server active text");
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(30, 70);
+    display.println("Server active");
+  }
+  display.display(true);  // full refresh to update the screen
 }
 
 
@@ -252,7 +250,8 @@ void setup() {
 
   // Initialize the display
   display.initWatchy();
-  displayWatchface();
+  delay(1000);
+  displayWatchface(false);
 
   // Setup Accelerometer
   setupAccelerometer();
@@ -271,30 +270,10 @@ void setup() {
 
 void loop() {
   dnsServer.processNextRequest();
-    Serial.print(".");
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastAccelUpdate >= accelUpdateInterval) {
-        lastAccelUpdate = currentMillis;
 
   if (sensorIRQ) {
     sensorIRQ = false;
     uint16_t status = accel.readIrqStatus();
-
-    int16_t x, y, z;
-    if (accel.getAccelerometer(x, y, z)) {
-      StaticJsonDocument<200> jsonDoc;
-      jsonDoc["x"] = x;
-      jsonDoc["y"] = y;
-      jsonDoc["z"] = z;
-      String jsonString;
-      serializeJson(jsonDoc, jsonString);
-      ws.textAll(jsonString);
-    }
-    }
-
-    if (sensorIRQ) {
-        sensorIRQ = false;
-        uint16_t status = accel.readIrqStatus();
 
     if (accel.isPedometer()) {
       uint32_t stepCounter = accel.getPedometerCounter();
@@ -307,8 +286,28 @@ void loop() {
     }
   }
 
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastAccelUpdate >= accelUpdateInterval) {
+    lastAccelUpdate = currentMillis;
 
-  displayWatchface();  // Display watchface with "Server active" text
+    int16_t x, y, z;
+    if (accel.getAccelerometer(x, y, z)) {
+      StaticJsonDocument<200> jsonDoc;
+      jsonDoc["x"] = x;
+      jsonDoc["y"] = y;
+      jsonDoc["z"] = z;
+      String jsonString;
+      serializeJson(jsonDoc, jsonString);
+      ws.textAll(jsonString);
+    }
+  }
+
+  if (apActive != previousApState) {  // only update the display if the state changes
+    previousApState = apActive;
+    if (apActive) {
+      displayWatchface(true);  // Display watchface with "Server active" text
+    }
+  }
 
   if (digitalRead(MENU_BTN_PIN) == HIGH) {  // Button is pressed
     if (!buttonPressed) {
@@ -319,7 +318,7 @@ void loop() {
       server.end();
       apActive = false;
       WiFi.softAPdisconnect(true);
-      displayWatchface();
+      displayWatchface();  // removes the server active text
       enterDeepSleep();
     }
   } else {

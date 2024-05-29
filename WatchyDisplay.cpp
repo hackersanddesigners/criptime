@@ -26,6 +26,7 @@ void WatchyDisplay::displayErrorMessage(const char *message) {
     println(message);
     display(true);
 }
+
 void WatchyDisplay::displayBMP(const char *filename) {
   renderBMP(filename);
   display(true); // Update the display with the new image
@@ -101,6 +102,5 @@ void WatchyDisplay::renderBMP(const char *filename) {
             drawPixel(x, y, color);
         }
     }
-
     file.close();
 }
