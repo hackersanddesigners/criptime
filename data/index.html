@@ -9,6 +9,7 @@
       font-family: Arial, sans-serif;
       text-align: center;
       margin-top: 50px;
+      overflow: hidden;
     }
     #messages {
       margin-top: 20px;
@@ -26,6 +27,13 @@
     .sensor-data div {
       margin: 5px 0;
     }
+    #ball {
+      width: 50px;
+      height: 50px;
+      background-color: blue;
+      border-radius: 50%;
+      position: absolute;
+    }
   </style>
 </head>
 <body>
@@ -41,15 +49,25 @@
   </div>
   
   <div id="messages"></div>
+  <div id="ball"></div>
 
   <script>
     var gateway = `ws://${window.location.hostname}/ws`;
     var websocket;
+    var sensorData = { x: 0, y: 0, z: 0 }; // Default values
+    var ball = document.getElementById('ball');
+    var width = window.innerWidth;
+    var height = window.innerHeight;
 
     window.addEventListener('load', onLoad);
+    window.addEventListener('resize', () => {
+      width = window.innerWidth;
+      height = window.innerHeight;
+    });
 
     function onLoad() {
       initWebSocket();
+      animateBall();
     }
 
     function initWebSocket() {
@@ -94,19 +112,43 @@
         var json = JSON.parse(data);
         if (json.x !== undefined) {
           document.getElementById('x').textContent = 'X: ' + json.x;
+          sensorData.x = json.x;
         }
         if (json.y !== undefined) {
           document.getElementById('y').textContent = 'Y: ' + json.y;
+          sensorData.y = json.y;
         }
         if (json.z !== undefined) {
           document.getElementById('z').textContent = 'Z: ' + json.z;
+          sensorData.z = json.z;
         }
         if (json.steps !== undefined) {
           document.getElementById('steps').textContent = 'Steps: ' + json.steps;
+          sensorData.steps = json.steps;
         }
       } catch (e) {
         console.error('Error parsing JSON:', e);
       }
+    }
+
+    function animateBall() {
+      // Assuming sensor data range for x and y is -550 to 550
+      var minX = -550, maxX = 550;
+      var minY = -550, maxY = 550;
+      
+      var ballX = (sensorData.x - minX) / (maxX - minX) * width;
+      var ballY = (sensorData.y - minY) / (maxY - minY) * height;
+
+      ball.style.left = ballX + 'px';
+      ball.style.top = ballY + 'px';
+
+      if(sensorData.z < 0 ) {
+        ball.style.backgroundColor = "#ff0000";
+      } else {
+        ball.style.backgroundColor = "#ff00ff";
+      }
+      
+      requestAnimationFrame(animateBall);
     }
   </script>
 </body>
