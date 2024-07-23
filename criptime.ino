@@ -87,6 +87,9 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       if (strcmp((char *)data, "ping") == 0) {
         ws.textAll("pong");
       }
+      else if (strcmp((char *)data, "buzz") == 0) {
+        vibMotor(75, 4);     // vibrate the motor
+      }
     }
   }
 }
@@ -180,7 +183,6 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
   server.begin();
 }
 
-
 void vibMotor(uint8_t intervalMs, uint8_t length) {
   pinMode(VIB_MOTOR_PIN, OUTPUT);
   bool motorOn = false;
@@ -190,7 +192,6 @@ void vibMotor(uint8_t intervalMs, uint8_t length) {
     delay(intervalMs);
   }
 }
-
 
 void enterDeepSleep() {
   Serial.println("Entering deep sleep");
