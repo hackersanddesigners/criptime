@@ -233,7 +233,7 @@ void setup() {
   Serial.begin(115200);
   while (!Serial)
     ;
-  delay(1000);
+  delay(2000);
   Serial.println("\n\nCripTime, V0.0.2 compiled " __DATE__ " " __TIME__ " by hrk");
   Serial.printf("%s-%d\n\r", ESP.getChipModel(), ESP.getChipRevision());
 
