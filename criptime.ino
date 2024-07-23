@@ -13,6 +13,7 @@
 
 #define MENU_BTN_PIN 26
 #define AP_BTN_PIN 35  // Pin to activate AP and webserver
+#define VIB_MOTOR_PIN 13
 
 const char *ssid = "CripTime";
 const char *password = NULL;
@@ -154,6 +155,13 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
     Serial.println("Served Basic HTML Page from LittleFS");
   });
 
+  server.on("/buzz", HTTP_ANY, [](AsyncWebServerRequest *request) {
+    vibMotor(75, 4);     // vibrate the motor
+    request->send(200);  // send ok
+  });
+  });
+
+
   server.onNotFound([](AsyncWebServerRequest *request) {
     if (LittleFS.exists(request->url())) {
       request->send(LittleFS, request->url(), String(), false);
@@ -173,6 +181,18 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
 
   server.begin();
 }
+
+
+void vibMotor(uint8_t intervalMs, uint8_t length) {
+  pinMode(VIB_MOTOR_PIN, OUTPUT);
+  bool motorOn = false;
+  for (int i = 0; i < length; i++) {
+    motorOn = !motorOn;
+    digitalWrite(VIB_MOTOR_PIN, motorOn);
+    delay(intervalMs);
+  }
+}
+
 
 void enterDeepSleep() {
   Serial.println("Entering deep sleep");
