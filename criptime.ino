@@ -159,8 +159,6 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
     vibMotor(75, 4);     // vibrate the motor
     request->send(200);  // send ok
   });
-  });
-
 
   server.onNotFound([](AsyncWebServerRequest *request) {
     if (LittleFS.exists(request->url())) {
