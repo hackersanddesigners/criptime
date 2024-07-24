@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,24 +10,37 @@
       font-family: Arial, sans-serif;
       text-align: center;
       margin-top: 50px;
-      overflow: hidden;
     }
-    #messages {
+
+    #messages,
+    .messages-loaded {
       margin-top: 20px;
       height: 200px;
       overflow-y: scroll;
       border: 1px solid #ccc;
       padding: 10px;
     }
+
+    #messages,
+    .post-messages {
+      display: inline-block;
+      width: 45%;
+      vertical-align: top;
+      margin-left: 1em;
+    }
+
     #messages p {
       margin: 5px 0;
     }
+
     .sensor-data {
       margin-top: 20px;
     }
+
     .sensor-data div {
       margin: 5px 0;
     }
+
     #ball {
       width: 50px;
       height: 50px;
@@ -34,23 +48,42 @@
       border-radius: 50%;
       position: absolute;
     }
+
+    .output {
+      display: flex;
+      flex-direction: row;
+    }
   </style>
 </head>
+
 <body>
   <h1>ESP32 WebSocket Example</h1>
   <button onclick="sendMessage('ping')">Send Ping</button>
   <button onclick="sendMessage('buzz')">Send Buzz</button>
-  
-  <img src="websocks.webp" alt="WebSockets" width="200" height="200">
-  
+
+  <!-- <img src="websocks.webp" alt="WebSockets" width="200" height="200"> -->
+
   <div class="sensor-data">
     <div id="x">X: </div>
     <div id="y">Y: </div>
     <div id="z">Z: </div>
     <div id="steps">Steps: </div>
   </div>
-  
-  <div id="messages"></div>
+
+  <div class="output">
+    <div id="messages"></div>
+
+    <div class="post-messages">
+      <!-- form that posts a message to the /message endpoint -->
+      <form id="post_message" action="/message" method="post">
+        <input type="text" name="message" placeholder="Enter message">
+        <button type="submit">Send</button>
+      </form>
+
+      <div class="messages-loaded"></div>
+    </div>
+  </div>
+
   <div id="ball"></div>
 
   <script>
@@ -134,24 +167,83 @@
     }
 
     function animateBall() {
-      // Assuming sensor data range for x and y is -550 to 550
+      // Assuming sensor data range for x and y is -550 to 550, but not sure. weird.
       var minX = -550, maxX = 550;
       var minY = -550, maxY = 550;
-      
+
       var ballX = (sensorData.x - minX) / (maxX - minX) * width;
       var ballY = (sensorData.y - minY) / (maxY - minY) * height;
 
       ball.style.left = ballX + 'px';
       ball.style.top = ballY + 'px';
 
-      if(sensorData.z < 0 ) {
+      if (sensorData.z < 0) {
         ball.style.backgroundColor = "#ff0000";
       } else {
         ball.style.backgroundColor = "#ff00ff";
       }
-      
+
       requestAnimationFrame(animateBall);
     }
+
+    /* handle form submission */
+    document.getElementById('post_message').addEventListener('submit', function (event) {
+      event.preventDefault();
+      var message = document.querySelector('input[name="message"]').value;
+      var formData = new FormData();
+      formData.append('message', message);
+
+      fetch('/message', {
+        method: 'POST',
+        body: formData,
+      })
+        .then(response => response.text()) // Change to response.text() to handle plain text response
+        .then(data => {
+          console.log('Success:', data);
+          document.querySelector('input[name="message"]').value = '';
+          var messages = document.querySelector('.messages-loaded');
+          // remove previous messages
+          messages.innerHTML = '';
+          var p = document.createElement('p');
+          p.innerHTML = nl2br(data);
+          messages.appendChild(p);
+          messages.scrollTop = messages.scrollHeight;
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+        });
+    });
+    
+    /* get the messages on load by calling the /message endpoint */
+    document.addEventListener('load', getMessages());
+
+    function getMessages() {
+      fetch('/message', {
+        method: 'POST', // we can only use post here. 
+      })
+        .then(response => response.text()) // response.text() cause its plain text response
+        .then(data => {
+          console.log('Success:', data);
+          var messages = document.querySelector('.messages-loaded');
+          // remove previous messages
+          messages.innerHTML = '';
+          var p = document.createElement('p');
+          p.innerHTML = nl2br(data);
+          messages.appendChild(p);
+          messages.scrollTop = messages.scrollHeight;
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+        });
+    }
+
+    /* each message gets a new line
+    should be a ul or smth */
+    function nl2br(response) {
+      return response.replace(/\n/g, '<br>');
+    }
+
   </script>
 </body>
+
 </html>

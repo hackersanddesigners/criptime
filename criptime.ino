@@ -165,6 +165,41 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP) {
     request->send(200);  // send ok
   });
 
+  /*
+  handle post messages.
+  store "message" post value in a file.
+  returns all the messages in the response.
+  */
+  server.on("/message", HTTP_POST, [](AsyncWebServerRequest *request) {
+    // create message.txt if it doesn't exist
+    if (!LittleFS.exists("/message.txt")) {
+      File file = LittleFS.open("/message.txt", "w");
+      if (!file) {
+        Serial.println("Failed to create file for writing");
+        request->send(500, "text/plain", "Failed to create file for writing");
+        return;
+      }
+      file.close();
+    }
+
+    if (request->hasParam("message", true)) {
+      AsyncWebParameter *message = request->getParam("message", true);
+      File file = LittleFS.open("/message.txt", "a"); // should exist right?
+      file.print(message->value() + "\n");
+      file.close();
+    } else {
+      Serial.println("No message param. Nothing to add.");
+    }
+
+    String response = "Messages:\n";
+    File file = LittleFS.open("/message.txt", "r");
+    while (file.available()) {
+      response += file.readStringUntil('\n') + "\n";
+    }
+    file.close();
+    request->send(200, "text/plain", response);
+  });
+
   server.onNotFound([](AsyncWebServerRequest *request) {
     if (LittleFS.exists(request->url())) {
       request->send(LittleFS, request->url(), String(), false);
@@ -371,5 +406,3 @@ void loop() {
     buttonPressed = false;
   }
 }
-
-
