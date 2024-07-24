@@ -15,7 +15,7 @@
 #define AP_BTN_PIN 35  // Pin to activate AP and webserver
 #define VIB_MOTOR_PIN 13
 
-const char *ssid = "CripTime";
+char ssid[32] = "CripTime";
 const char *password = NULL;
 
 AsyncWebServer server(80);
@@ -55,7 +55,6 @@ bool previousApState = false;
 unsigned long lastAccelUpdate = 0;
 const unsigned long accelUpdateInterval = 100;  // Update every 0.1 second
 
-
 // Initialize the Watchy display
 WatchyDisplay display(DISPLAY_CS, DISPLAY_DC, DISPLAY_RES, DISPLAY_BUSY);
 
@@ -89,6 +88,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       }
       else if (strcmp((char *)data, "buzz") == 0) {
         vibMotor(75, 4);     // vibrate the motor
+        ws.textAll("buzzed");
       }
     }
   }
@@ -106,9 +106,12 @@ void setUpDNSServer(DNSServer &dnsServer, const IPAddress &localIP) {
 }
 
 void startSoftAccessPoint(const char *ssid, const char *password, const IPAddress &localIP, const IPAddress &gatewayIP) {
+  getSSIDFromFS();
   WiFi.mode(WIFI_MODE_AP);
   WiFi.softAPConfig(localIP, gatewayIP, subnetMask);
   WiFi.softAP(ssid, password, 6, 0, 4);
+  Serial.print("softAP SSID: ");
+  Serial.println(ssid);
 
   esp_wifi_stop();
   esp_wifi_deinit();
@@ -246,6 +249,29 @@ void displayWatchface(bool renderServerText = false) {
   display.display(true);  // full refresh to update the screen
 }
 
+void getSSIDFromFS() {
+  File root = LittleFS.open("/");
+  File file = root.openNextFile();
+  while (file) {
+    String n = file.name();
+    Serial.println(n);
+    int dot = n.lastIndexOf(".");
+    String ext = n.substring(dot);
+    if (ext == ".ssid") {
+      String hostName;
+      if (n.substring(0, 1) == "/") {
+        hostName = n.substring(1, dot);
+      } else {
+        hostName = n.substring(0, dot);
+      }
+      Serial.print("Using hostname: ");
+      Serial.println(hostName);
+      hostName.toCharArray(ssid, sizeof(ssid));
+      break; // Exit loop after finding the SSID file
+    }
+    file = root.openNextFile();
+  }
+}
 
 void setup() {
   Serial.setTxBufferSize(1024);
@@ -344,3 +370,5 @@ void loop() {
     buttonPressed = false;
   }
 }
+
+
