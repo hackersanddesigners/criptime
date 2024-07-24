@@ -85,9 +85,8 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       data[len] = 0;
       if (strcmp((char *)data, "ping") == 0) {
         ws.textAll("pong");
-      }
-      else if (strcmp((char *)data, "buzz") == 0) {
-        vibMotor(75, 4);     // vibrate the motor
+      } else if (strcmp((char *)data, "buzz") == 0) {
+        vibMotor(75, 4);  // vibrate the motor
         ws.textAll("buzzed");
       }
     }
@@ -245,6 +244,8 @@ void displayWatchface(bool renderServerText = false) {
     display.setTextColor(GxEPD_BLACK);
     display.setCursor(30, 70);
     display.println("Server active");
+    display.print("SSID: ");
+    display.println(ssid);
   }
   display.display(true);  // full refresh to update the screen
 }
@@ -267,7 +268,7 @@ void getSSIDFromFS() {
       Serial.print("Using hostname: ");
       Serial.println(hostName);
       hostName.toCharArray(ssid, sizeof(ssid));
-      break; // Exit loop after finding the SSID file
+      break;  // Exit loop after finding the SSID file
     }
     file = root.openNextFile();
   }
